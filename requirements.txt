@@ -1,0 +1,19 @@
+torch>=2.0.0
+torchvision>=0.15.0
+
+# 重要：Qwen2.5-VL系列需要最新版本的transformers
+# Qwen2.5-VL-3B-Instruct和Qwen3-VL需要transformers>=4.57.0以支持qwen2_5_vl和qwen3_vl模型类型
+# 从源码安装最新版本（推荐）:
+# pip install git+https://github.com/huggingface/transformers.git accelerate
+
+transformers>=4.57.0
+accelerate>=0.20.0
+
+lmdeploy>=0.6.0  # 与最新transformers可能存在兼容性问题，Qwen2.5-VL不需要
+
+numpy>=1.24.0
+pillow>=10.0.0
+
+huggingface_hub>=0.20.0  # 用于从HF下载模型
+
+tqdm>=4.65.0
