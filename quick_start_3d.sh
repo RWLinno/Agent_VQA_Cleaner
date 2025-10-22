@@ -19,30 +19,26 @@ export BATCH_SIZE=4
 # ========================================
 # 重要：ROOT_PATH 应指向 3D/ 目录（不是 3D/image/）
 #       系统会自动在 image/ 和 depth/ 子目录中查找文件
-BASE_3D="/path/to/your/dataset/3D"
+BASE_3D="/mnt/data/datasets/transferred_datasets/datasets_train/refspatial/3D"
 
 # 【配置1】标准选择题（默认）
-JSON_FILE="$BASE_3D/choice_qa.json"
+JSON_FILE="$BASE_3D/choice_qa_3D_qwenvl.json"
 OUTPUT_FILE="./output/3D/choice_qa_cleaned.jsonl"
 
-# 【配置2】多视角问题 - 取消下面注释使用
-# JSON_FILE="$BASE_3D/multi_view_qa.json"
-# OUTPUT_FILE="./output/3D/multi_view_qa_cleaned.jsonl"
-
-# 【配置3】视觉选择题（带边界框）- 取消下面注释使用
-# JSON_FILE="$BASE_3D/visual_choice_qa.json"
-# OUTPUT_FILE="./output/3D/visual_choice_qa_cleaned.jsonl"
-
-# 【配置4】推理模板问题 - 取消下面注释使用
-# JSON_FILE="$BASE_3D/reasoning_template_qa.json"
+# 【配置2】推理模板问题 - 取消下面注释使用
+# JSON_FILE="$BASE_3D/reasoning_template_qa_3D_qwenvl.json"
 # OUTPUT_FILE="./output/3D/reasoning_template_qa_cleaned.jsonl"
 
-# 【配置5】空置检测问题 - 取消下面注释使用
-# JSON_FILE="$BASE_3D/vacant_qa.json"
+# 【配置3】视觉选择题 - 取消下面注释使用
+# JSON_FILE="$BASE_3D/visual_choice_qa_3D_qwenvl.json"
+# OUTPUT_FILE="./output/3D/visual_choice_qa_cleaned.jsonl"
+
+# 【配置4】空置检测问题 - 取消下面注释使用
+# JSON_FILE="$BASE_3D/vacant_qa_3D_qwenvl.json"
 # OUTPUT_FILE="./output/3D/vacant_qa_cleaned.jsonl"
 
 # ROOT_PATH 统一指向 3D 根目录
-ROOT_PATH="$BASE_3D/"
+ROOT_PATH="$BASE_3D/images/"
 
 # 创建输出目录
 mkdir -p ./output/3D

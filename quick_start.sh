@@ -19,20 +19,23 @@ export BATCH_SIZE=4
 # 数据路径配置（请根据实际情况修改）
 # ========================================
 
-# 【2D数据示例】
-JSON_FILE="/path/to/your/dataset/2D/choice_qa.json"
-ROOT_PATH="/path/to/your/dataset/2D/image/"
+# 【2D数据配置】- 当前使用的数据集
+BASE_2D="/mnt/data/datasets/transferred_datasets/datasets_train/refspatial/2D"
+
+# 选择要处理的2D数据集（取消注释选择）
+JSON_FILE="$BASE_2D/choice_qa_2D_qwenvl.json"
 OUTPUT_FILE="./output/2D/choice_qa_cleaned.jsonl"
 
-# 【3D数据示例 - 取消下面的注释来使用】
-# 支持的3D数据类型：
-#   - choice_qa.json: 标准选择题（单图+单深度图）
-#   - multi_view_qa.json: 多视角问题（多图+多深度图）
-#   - visual_choice_qa.json: 视觉选择题（带边界框）
-#   - reasoning_template_qa.json: 推理模板问题
-#   - vacant_qa.json: 空置检测问题
-# JSON_FILE="/path/to/your/dataset/3D/choice_qa.json"
-# ROOT_PATH="/path/to/your/dataset/3D/"
+# 或者使用推理模板数据集
+# JSON_FILE="$BASE_2D/reasoning_template_qa_2D_qwenvl.json"
+# OUTPUT_FILE="./output/2D/reasoning_template_qa_cleaned.jsonl"
+
+ROOT_PATH="$BASE_2D/images/"
+
+# 【3D数据示例 - 如需使用3D数据，请使用 quick_start_3d.sh】
+# BASE_3D="/mnt/data/datasets/transferred_datasets/datasets_train/refspatial/3D"
+# JSON_FILE="$BASE_3D/choice_qa_3D_qwenvl.json"
+# ROOT_PATH="$BASE_3D/images/"
 # OUTPUT_FILE="./output/3D/choice_qa_cleaned.jsonl"
 
 # 创建输出目录（自动根据OUTPUT_FILE创建）

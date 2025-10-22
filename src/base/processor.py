@@ -6,7 +6,10 @@ from ..utils.Heuristic_Rules_Internvl2_5 import (
     flag_function_1,
     flag_function_2,
     flag_function_3,
-    flag_function_4
+    flag_function_4,
+    flag_function_5,
+    flag_function_6,
+    flag_function_7
 )
 
 logger = logging.getLogger(__name__)
@@ -148,7 +151,7 @@ class Processor:
     
     def apply_heuristic_rules(self, item: Dict[str, Any]) -> Tuple[bool, List[str]]:
         """
-        应用启发式规则检查
+        应用启发式规则检查 - 增强版本，包含更多规则
         
         Args:
             item: 包含 answer 和 conversations 的数据项
@@ -162,23 +165,49 @@ class Processor:
         reasons = []
         answer = item.get('answer', '')
         conversations = item.get('conversations', [])
+        config = self.config.HEURISTIC_CONFIG
         
+        # 规则1: 检查对话中的n-gram重复
         if check_conversations_repetition(
             conversations, 
-            repeat_threshold=self.config.HEURISTIC_CONFIG['repeat_threshold'],
-            ngram=self.config.HEURISTIC_CONFIG['ngram']
+            repeat_threshold=config['repeat_threshold'],
+            ngram=config['ngram']
         ):
             reasons.append("High n-gram repetition in conversations")
         
-        if flag_function_1(answer):
+        # 规则2: 检测循环模式（超长句子+尾部重复）
+        if flag_function_1(
+            answer,
+            super_long_words=config['super_long_sentence_words'],
+            tail_len=config['tail_repeat_length'],
+            tail_count=config['tail_repeat_count']
+        ):
             reasons.append("Looping pattern detected (long sentence + tail repetition)")
         
-        if flag_function_2(answer):
+        # 规则3: 检测极长句子
+        if flag_function_2(answer, extreme_long_words=config['extreme_long_sentence_words']):
             reasons.append("Extremely long sentence detected")
         
-        if len(answer) >= self.config.HEURISTIC_CONFIG['tail_repeat_length']:
-            if flag_function_4(answer):
+        # 规则4: 检测尾部重复
+        if len(answer) >= config['tail_repeat_length']:
+            if flag_function_4(
+                answer,
+                tail_len=config['tail_repeat_length'],
+                tail_count=config['tail_repeat_count']
+            ):
                 reasons.append("Tail repetition detected")
+        
+        # 规则5: 检测词汇多样性不足
+        if flag_function_5(answer, min_unique_ratio=config['min_unique_word_ratio']):
+            reasons.append("Insufficient vocabulary diversity")
+        
+        # 规则6: 检测异常特殊字符比例
+        if flag_function_6(answer, max_special_ratio=config['max_special_char_ratio']):
+            reasons.append("Excessive special characters")
+        
+        # 规则7: 检测可疑重复模式
+        if flag_function_7(answer, suspicious_patterns=config['suspicious_patterns']):
+            reasons.append("Suspicious repetitive pattern detected")
         
         should_keep = len(reasons) == 0
         return should_keep, reasons
