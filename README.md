@@ -11,9 +11,11 @@
 - **启发式规则**: 自动检测重复模式、超长句子、尾部循环等问题
 - **并发处理**: 多处理器并行处理，充分利用GPU资源
 - **增量保存**: 自动保存中间结果，防止数据丢失
+- **双模式支持**: 支持本地模型和阿里云EAS API两种模式 🆕
 
 ### 🚀 性能优势
 - **默认模型**: Qwen2.5-VL-3B-Instruct（仅3B参数，显存~8GB）
+- **云端部署**: 支持阿里云EAS API，无需本地GPU 🆕
 - **处理速度**: ~100-150 样本/分钟（4 GPUs, 8 processors）
 - **向后兼容**: 完全兼容 2D 数据处理
 - **灵活配置**: 支持命令行、环境变量、配置文件多种配置方式
@@ -51,7 +53,7 @@ pip install qwen-vl-utils[decord]==0.0.8
 
 ```bash
 # 设置可用GPU
-export CUDA_VISIBLE_DEVICES=0,1,2,3
+export CUDA_VISIBLE_DEVICES=0,1
 
 # 设置并发参数
 export NUM_PROCESSORS=8
@@ -86,6 +88,21 @@ vim batch_clean_3d.sh
 # 批量运行
 ./batch_clean_3d.sh
 ```
+
+#### 方式D: 使用阿里云EAS API（无需本地GPU）🆕
+```bash
+# 编辑 quick_start_eas.sh 配置EAS服务信息
+vim quick_start_eas.sh
+
+# 运行清洗（使用云端大模型）
+./quick_start_eas.sh
+```
+
+**特点**：
+- ✅ 无需本地GPU资源
+- ✅ 支持超大规模模型（如235B参数）
+- ✅ 配置简单，只需API地址和token
+- 📖 详细说明请查看 [README_EAS.md](README_EAS.md)
 
 ### 4. 查看结果
 
@@ -280,17 +297,21 @@ export PRIMARY_MODEL=/path/to/model
 ```
 AgentCleaner/
 ├── main.py                     # 主程序入口
-├── quick_start.sh              # 2D数据一键启动
-├── quick_start_3d.sh           # 3D数据一键启动
+├── quick_start.sh              # 2D数据一键启动（本地模型）
+├── quick_start_3d.sh           # 3D数据一键启动（本地模型）
+├── quick_start_eas.sh          # EAS API一键启动 🆕
 ├── batch_clean_3d.sh           # 批量处理所有3D数据 ⭐
 ├── requirements.txt            # 依赖列表
+├── README.md                   # 主文档
+├── README_EAS.md               # EAS使用说明 🆕
 │
 ├── src/                        # 源代码
-│   ├── config.py              # 配置管理
+│   ├── config.py              # 配置管理（支持EAS配置）
 │   ├── base/                  # 核心组件
-│   │   ├── vlm_agent.py       # VLM Agent（支持多图输入）
+│   │   ├── vlm_agent.py       # VLM Agent（本地模型）
+│   │   ├── vlm_agent_eas.py   # VLM Agent（EAS API）🆕
 │   │   ├── processor.py       # 数据处理器（智能路径查找）
-│   │   └── unified_manager.py # 统一管理器
+│   │   └── unified_manager.py # 统一管理器（支持双模式）
 │   └── utils/                 # 工具函数
 │       ├── Data_Selector.py   # 数据选择器
 │       └── Heuristic_Rules_Internvl2_5.py  # 启发式规则
@@ -301,9 +322,11 @@ AgentCleaner/
 │   └── analyze_results.py     # 结果分析
 │
 ├── output/                     # 输出目录
-│   ├── 2D/                    # 2D数据输出
+│   ├── 2D/                    # 2D数据输出（本地）
+│   ├── 2D_eas/                # 2D数据输出（EAS）🆕
 │   ├── 2D_ex/                 # 2D提取字段输出
-│   └── 3D/                    # 3D数据输出
+│   ├── 3D/                    # 3D数据输出（本地）
+│   └── 3D_eas/                # 3D数据输出（EAS）🆕
 │
 ├── examples/                   # 示例数据
 │   ├── choice_qa_test.json    # 测试数据
@@ -564,6 +587,41 @@ with open('output_cleaned.jsonl', 'r') as f:
         # 进行训练...
 ```
 
+## 🌐 使用阿里云EAS API
+
+### 快速开始
+
+```bash
+# 1. 配置EAS信息
+export AGENT_TYPE="eas"
+export EAS_BASE_URL="http://your-eas-url"
+export EAS_TOKEN="your-token"
+export EAS_MODEL_NAME="Qwen3-VL-235B-A22B-Instruct"
+
+# 2. 运行清洗
+./quick_start_eas.sh
+```
+
+### 测试连接
+
+使用测试脚本验证EAS配置：
+
+```bash
+# 测试EAS API连接
+python test_eas_connection.py
+```
+
+### 详细说明
+
+完整的EAS使用指南请参考：[README_EAS.md](README_EAS.md)
+
+包含：
+- EAS服务配置详解
+- API调用说明
+- 并发配置建议
+- 故障排查指南
+- 成本控制建议
+
 ## 📄 许可证
 
 本项目遵循 MIT 许可证。
@@ -572,9 +630,10 @@ with open('output_cleaned.jsonl', 'r') as f:
 
 - Qwen2.5-VL 模型团队
 - InternVL 模型团队
+- 阿里云PAI-EAS团队
 - 所有开源贡献者
 
 ---
 
-**更新日期**: 2025-10-21  
-**版本**: 2.0.0
+**更新日期**: 2025-10-24  
+**版本**: 2.1.0 (新增EAS支持)

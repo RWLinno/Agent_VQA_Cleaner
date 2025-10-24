@@ -8,7 +8,7 @@ echo "AgentCleaner - VQA数据清洗系统"
 echo "========================================"
 
 # 设置GPU（根据需要修改）
-export CUDA_VISIBLE_DEVICES=0,1,2,3
+export CUDA_VISIBLE_DEVICES=0,1
 echo "使用GPU: $CUDA_VISIBLE_DEVICES"
 
 # 设置并发数（根据GPU数量调整）

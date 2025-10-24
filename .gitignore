@@ -1,6 +1,10 @@
 ./output/
 ./datasets/
 
+# keep token!
+quick_start_eas.sh
+
+
 # Python
 __pycache__/
 *.py[cod]

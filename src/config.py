@@ -11,7 +11,15 @@ MODELS_DIR = PROJECT_ROOT / "models"
 class Config:
     """全局配置类"""
     
-    # 模型配置
+    # ========================================
+    # Agent类型配置
+    # ========================================
+    # 可选值: 'local' (本地模型) 或 'eas' (阿里云EAS API)
+    AGENT_TYPE = os.environ.get('AGENT_TYPE', 'local')
+    
+    # ========================================
+    # 本地模型配置
+    # ========================================
     # 优先使用环境变量，否则使用预设路径，最后使用本地models目录
     
     # 主模型: Qwen3-VL-30B-A3B-Thinking (本地模型)
@@ -41,6 +49,31 @@ class Config:
     # 自动下载配置
     AUTO_DOWNLOAD = os.environ.get('AUTO_DOWNLOAD', 'true').lower() == 'true'
     MODELS_CACHE_DIR = str(MODELS_DIR)
+    
+    # ========================================
+    # 阿里云EAS API配置
+    # ========================================
+    # EAS服务基础URL
+    EAS_BASE_URL = os.environ.get(
+        'EAS_BASE_URL',
+        'http://1054059136692489.cn-shanghai.pai-eas.aliyuncs.com/api/predict/quickstart_deploy_20251021_p4ar'
+    )
+    
+    # EAS认证token
+    EAS_TOKEN = os.environ.get(
+        'EAS_TOKEN',
+        'ZmU3OTQxMGVlODFmYzZiNjQ3MTBlOWQ3NGMzZGQ4NzFlNmNkZjZlYQ=='
+    )
+    
+    # EAS模型名称
+    EAS_MODEL_NAME = os.environ.get(
+        'EAS_MODEL_NAME',
+        'Qwen3-VL-235B-A22B-Instruct-FP8'
+    )
+    
+    # EAS API配置
+    EAS_MAX_TOKENS = int(os.environ.get('EAS_MAX_TOKENS', 256))
+    EAS_TIMEOUT = int(os.environ.get('EAS_TIMEOUT', 60))  # API超时时间（秒）
     
     # 并发配置
     NUM_PROCESSORS = int(os.environ.get('NUM_PROCESSORS', 8))  # 默认8个并发processor
@@ -301,16 +334,25 @@ The question and answer are:
     @classmethod
     def print_config(cls):
         """打印当前配置"""
-        model_path, model_name = cls.get_available_model()
         print("=" * 60)
         print("AgentCleaner 配置信息")
         print("=" * 60)
-        print(f"使用模型: {model_name} ⭐")
-        print(f"模型路径: {model_path}")
+        print(f"Agent类型: {cls.AGENT_TYPE}")
+        
+        if cls.AGENT_TYPE == 'eas':
+            print(f"使用模型: {cls.EAS_MODEL_NAME} (阿里云EAS) ⭐")
+            print(f"EAS URL: {cls.EAS_BASE_URL}")
+            print(f"Max Tokens: {cls.EAS_MAX_TOKENS}")
+            print(f"Timeout: {cls.EAS_TIMEOUT}s")
+        else:
+            model_path, model_name = cls.get_available_model()
+            print(f"使用模型: {model_name} (本地模型) ⭐")
+            print(f"模型路径: {model_path}")
+            print(f"GPU设置: {cls.CUDA_VISIBLE_DEVICES}")
+            print(f"Tensor Parallel: {cls.TP}")
+        
         print(f"并发处理器数量: {cls.NUM_PROCESSORS}")
         print(f"批处理大小: {cls.BATCH_SIZE}")
-        print(f"GPU设置: {cls.CUDA_VISIBLE_DEVICES}")
-        print(f"Tensor Parallel: {cls.TP}")
         print(f"评分阈值: {cls.SCORE_THRESHOLD}")
         print(f"保存间隔: {cls.SAVE_INTERVAL}")
         print(f"输出格式: {cls.OUTPUT_FORMAT}")

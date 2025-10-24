@@ -10,6 +10,7 @@ from typing import List, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 from .vlm_agent import VLMAgent
+from .vlm_agent_eas import VLMAgentEAS
 from .processor import Processor
 
 logger = logging.getLogger(__name__)
@@ -33,18 +34,31 @@ class UnifiedManager:
         config.print_config()
     
     def initialize_agent(self):
-        """初始化VLM Agent"""
+        """初始化VLM Agent（根据配置选择本地或EAS）"""
         logger.info("正在初始化VLM Agent...")
         
-        model_path, model_name = self.config.get_available_model()
-        
         try:
-            self.vlm_agent = VLMAgent(
-                model_path=model_path,
-                tp=self.config.TP,
-                session_len=self.config.SESSION_LEN
-            )
-            logger.info(f"VLM Agent 初始化成功: {model_name}")
+            if self.config.AGENT_TYPE == 'eas':
+                # 使用阿里云EAS API
+                logger.info("使用阿里云EAS API模式")
+                self.vlm_agent = VLMAgentEAS(
+                    base_url=self.config.EAS_BASE_URL,
+                    token=self.config.EAS_TOKEN,
+                    model_name=self.config.EAS_MODEL_NAME,
+                    max_tokens=self.config.EAS_MAX_TOKENS,
+                    timeout=self.config.EAS_TIMEOUT
+                )
+                logger.info(f"EAS VLM Agent 初始化成功: {self.config.EAS_MODEL_NAME}")
+            else:
+                # 使用本地模型
+                logger.info("使用本地模型模式")
+                model_path, model_name = self.config.get_available_model()
+                self.vlm_agent = VLMAgent(
+                    model_path=model_path,
+                    tp=self.config.TP,
+                    session_len=self.config.SESSION_LEN
+                )
+                logger.info(f"本地 VLM Agent 初始化成功: {model_name}")
         except Exception as e:
             logger.error(f"VLM Agent 初始化失败: {e}")
             raise
