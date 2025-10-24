@@ -241,14 +241,21 @@ class UnifiedManager:
                     f"已处理 {len(chunk_results)}/{len(chunk)}"
                 )
                 
-                if output_file and len(chunk_results) % 50 == 0 and len(chunk_results) > 0:
-                    temp_file = output_file.replace('.jsonl', f'_temp_p{processor.processor_id}_{len(chunk_results)}.jsonl')
+                # 每500条保存一次增量结果（只保存新增的500条）
+                if output_file and len(chunk_results) % 500 == 0 and len(chunk_results) > 0:
+                    # 计算当前批次的起始位置
+                    batch_num = len(chunk_results) // 500
+                    start_idx = (batch_num - 1) * 500
+                    end_idx = batch_num * 500
+                    incremental_results = chunk_results[start_idx:end_idx]
+                    
+                    temp_file = output_file.replace('.jsonl', f'_temp_p{processor.processor_id}_batch{batch_num}.jsonl')
                     try:
                         with self.lock:
-                            self.save_results(temp_file, chunk_results, filter_out=False, clean_format=False)
-                            logger.info(f"Processor {processor.processor_id}: 已保存中间结果到 {temp_file}")
+                            self.save_results(temp_file, incremental_results, filter_out=False, clean_format=False)
+                            logger.info(f"Processor {processor.processor_id}: 已保存结果到 {temp_file} (第 {start_idx+1}-{end_idx} 条)")
                     except Exception as save_error:
-                        logger.error(f"保存中间结果失败: {save_error}")
+                        logger.error(f"保存结果失败: {save_error}")
                 
             except Exception as e:
                 logger.error(f"处理批次失败: {e}")

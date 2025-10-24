@@ -67,11 +67,9 @@ class VLMAgentEAS:
         """
         try:
             with Image.open(image_path) as img:
-                # 转换为RGB模式（如果需要）
                 if img.mode != 'RGB':
                     img = img.convert('RGB')
                 
-                # 将图像编码为JPEG格式的字节流
                 buffer = io.BytesIO()
                 img.save(buffer, format='JPEG', quality=95)
                 img_bytes = buffer.getvalue()
@@ -102,7 +100,6 @@ class VLMAgentEAS:
         """
         content = []
         
-        # 添加图像（如果有）
         if image_path:
             try:
                 img_base64 = self._image_to_base64(image_path)
@@ -115,7 +112,6 @@ class VLMAgentEAS:
             except Exception as e:
                 logger.error(f"处理RGB图像失败: {e}")
         
-        # 添加深度图（如果有）
         if depth_path:
             try:
                 depth_base64 = self._image_to_base64(depth_path)
@@ -128,7 +124,6 @@ class VLMAgentEAS:
             except Exception as e:
                 logger.error(f"处理深度图失败: {e}")
         
-        # 添加文本
         content.append({
             "type": "text",
             "text": prompt_text
@@ -222,10 +217,8 @@ class VLMAgentEAS:
             响应文本
         """
         try:
-            # 构建消息内容
             content = self._build_message_content(prompt_text, image_path, depth_path)
             
-            # 构建消息
             messages = [
                 {"role": "system", "content": "You are a multi-modal VQA Data Quality Assessment Expert, able to accurately assess the quality of image and dialogue data."},
                 {"role": "user", "content": content}

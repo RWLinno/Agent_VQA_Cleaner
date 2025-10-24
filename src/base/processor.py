@@ -149,68 +149,75 @@ class Processor:
                 result['depth_path'] = depth_path
             return result
     
-    def apply_heuristic_rules(self, item: Dict[str, Any]) -> Tuple[bool, List[str]]:
+    def apply_heuristic_rules(self, item: Dict[str, Any]) -> Tuple[int, List[str]]:
         """
-        应用启发式规则检查 - 增强版本，包含更多规则
+        应用启发式规则检查 - 返回扣分和原因
         
         Args:
             item: 包含 answer 和 conversations 的数据项
             
         Returns:
-            (should_keep, reasons) - 是否保留和原因列表
+            (penalty_score, reasons) - 扣分分数和原因列表
         """
         if not self.enable_heuristic:
-            return True, []
+            return 0, []
         
         reasons = []
+        penalty_score = 0
         answer = item.get('answer', '')
         conversations = item.get('conversations', [])
         config = self.config.HEURISTIC_CONFIG
         
-        # 规则1: 检查对话中的n-gram重复
+        # 规则1: 检查对话中的n-gram重复 (严重问题，扣3分)
         if check_conversations_repetition(
             conversations, 
             repeat_threshold=config['repeat_threshold'],
             ngram=config['ngram']
         ):
-            reasons.append("High n-gram repetition in conversations")
+            reasons.append("High n-gram repetition (-3)")
+            penalty_score += 3
         
-        # 规则2: 检测循环模式（超长句子+尾部重复）
+        # 规则2: 检测循环模式（超长句子+尾部重复）(严重问题，扣3分)
         if flag_function_1(
             answer,
             super_long_words=config['super_long_sentence_words'],
             tail_len=config['tail_repeat_length'],
             tail_count=config['tail_repeat_count']
         ):
-            reasons.append("Looping pattern detected (long sentence + tail repetition)")
+            reasons.append("Looping pattern (-3)")
+            penalty_score += 3
         
-        # 规则3: 检测极长句子
+        # 规则3: 检测极长句子 (中等问题，扣2分)
         if flag_function_2(answer, extreme_long_words=config['extreme_long_sentence_words']):
-            reasons.append("Extremely long sentence detected")
+            reasons.append("Extremely long sentence (-2)")
+            penalty_score += 2
         
-        # 规则4: 检测尾部重复
+        # 规则4: 检测尾部重复 (严重问题，扣3分)
         if len(answer) >= config['tail_repeat_length']:
             if flag_function_4(
                 answer,
                 tail_len=config['tail_repeat_length'],
                 tail_count=config['tail_repeat_count']
             ):
-                reasons.append("Tail repetition detected")
+                reasons.append("Tail repetition (-3)")
+                penalty_score += 3
         
-        # 规则5: 检测词汇多样性不足
+        # 规则5: 检测词汇多样性不足 (中等问题，扣2分)
         if flag_function_5(answer, min_unique_ratio=config['min_unique_word_ratio']):
-            reasons.append("Insufficient vocabulary diversity")
+            reasons.append("Insufficient vocabulary diversity (-2)")
+            penalty_score += 2
         
-        # 规则6: 检测异常特殊字符比例
-        if flag_function_6(answer, max_special_ratio=config['max_special_char_ratio']):
-            reasons.append("Excessive special characters")
+        # 规则6: 检测异常特殊字符比例 - 已移除
+        # 原因：坐标格式 (0.xxx, 0.xxx) 和选项 (A) (B) 会被误判
+        # if flag_function_6(answer, max_special_ratio=config['max_special_char_ratio']):
+        #     reasons.append("Excessive special characters")
         
-        # 规则7: 检测可疑重复模式
+        # 规则7: 检测可疑重复模式 (严重问题，扣3分)
         if flag_function_7(answer, suspicious_patterns=config['suspicious_patterns']):
-            reasons.append("Suspicious repetitive pattern detected")
+            reasons.append("Suspicious repetitive pattern (-3)")
+            penalty_score += 3
         
-        should_keep = len(reasons) == 0
-        return should_keep, reasons
+        return penalty_score, reasons
     
     def process_single(
         self,
@@ -283,17 +290,11 @@ class Processor:
             self.error_count += 1
             return result
         
+        # 先应用启发式规则获取扣分
+        penalty_score = 0
+        heuristic_reasons = []
         if self.enable_heuristic:
-            should_keep, heuristic_reasons = self.apply_heuristic_rules(parsed)
-            if not should_keep:
-                result['score'] = 0
-                result['filtered'] = True
-                result['filter_reason'] = "Heuristic rules: " + "; ".join(heuristic_reasons)
-                result['heuristic_flags'] = heuristic_reasons
-                self.filtered_count += 1
-                image_name = os.path.basename(image_rel_path) if image_rel_path else "unknown"
-                logger.warning(f"[FILTERED] {image_name} | Score: 0 | Reason: Heuristic rules ({'; '.join(heuristic_reasons[:2])}...)")
-                return result
+            penalty_score, heuristic_reasons = self.apply_heuristic_rules(parsed)
         
         try:
             score, raw_response = self.vlm_agent.evaluate_sample(
@@ -304,20 +305,33 @@ class Processor:
                 system_prompt=system_prompt
             )
             
+            # 应用启发式扣分
+            original_score = score
+            if penalty_score > 0 and score > 0:
+                score = max(0, score - penalty_score)  # 确保分数不为负
+                result['heuristic_penalty'] = penalty_score
+                result['heuristic_flags'] = heuristic_reasons
+                result['original_score'] = original_score
+            
             result['score'] = score
             result['raw_response'] = raw_response
             
             # 判断是否过滤并打印日志
+            image_name = os.path.basename(image_rel_path) if image_rel_path else "unknown"
             if score < self.config.SCORE_THRESHOLD:
                 result['filtered'] = True
                 result['filter_reason'] = f"Score below threshold ({score} < {self.config.SCORE_THRESHOLD})"
                 self.filtered_count += 1
-                image_name = os.path.basename(image_rel_path) if image_rel_path else "unknown"
-                logger.warning(f"[FILTERED] {image_name} | Score: {score} | Threshold: {self.config.SCORE_THRESHOLD}")
+                if penalty_score > 0:
+                    logger.warning(f"[FILTERED] {image_name} | Original: {original_score} | Penalty: -{penalty_score} | Final: {score} | Threshold: {self.config.SCORE_THRESHOLD}")
+                else:
+                    logger.warning(f"[FILTERED] {image_name} | Score: {score} | Threshold: {self.config.SCORE_THRESHOLD}")
             else:
                 result['filtered'] = False
-                image_name = os.path.basename(image_rel_path) if image_rel_path else "unknown"
-                logger.info(f"[KEPT] {image_name} | Score: {score}")
+                if penalty_score > 0:
+                    logger.info(f"[KEPT] {image_name} | Original: {original_score} | Penalty: -{penalty_score} | Final: {score}")
+                else:
+                    logger.info(f"[KEPT] {image_name} | Score: {score}")
             
         except Exception as e:
             logger.error(f"[ERROR] {os.path.basename(image_rel_path)} | Score: -1 | Reason: {str(e)[:100]}")
@@ -405,31 +419,19 @@ class Processor:
                 self.error_count += 1
                 continue
             
+            # 应用启发式规则获取扣分（不再直接过滤）
+            penalty_score = 0
+            heuristic_reasons = []
             if self.enable_heuristic:
-                should_keep, heuristic_reasons = self.apply_heuristic_rules(parsed)
-                if not should_keep:
-                    result = {
-                        'question': parsed['question'],
-                        'answer': parsed['answer'],
-                        'image_path': image_rel_path,
-                        'full_image_path': full_image_path,
-                        'score': 0,
-                        'filtered': True,
-                        'filter_reason': "Heuristic rules: " + "; ".join(heuristic_reasons),
-                        'heuristic_flags': heuristic_reasons,
-                        'processor_id': self.processor_id
-                    }
-                    results.append(result)
-                    self.filtered_count += 1
-                    image_name = os.path.basename(image_rel_path) if image_rel_path else "unknown"
-                    logger.warning(f"[FILTERED] {image_name} | Score: 0 | Reason: Heuristic rules ({'; '.join(heuristic_reasons[:2])}...)")
-                    continue
+                penalty_score, heuristic_reasons = self.apply_heuristic_rules(parsed)
             
             eval_item = {
                 'question': parsed['question'],
                 'answer': parsed['answer'],
                 'image_path': full_image_path,
-                'image_rel_path': image_rel_path
+                'image_rel_path': image_rel_path,
+                'penalty_score': penalty_score,
+                'heuristic_reasons': heuristic_reasons
             }
             if full_depth_path:
                 eval_item['depth_path'] = full_depth_path
@@ -446,8 +448,15 @@ class Processor:
                 
                 for eval_result in evaluated:
                     score = eval_result.get('score', -1)
+                    penalty_score = eval_result.get('penalty_score', 0)
+                    heuristic_reasons = eval_result.get('heuristic_reasons', [])
                     
                     image_rel_path = eval_result.get('image_rel_path', eval_result.get('image_path', ''))
+                    
+                    # 应用启发式扣分
+                    original_score = score
+                    if penalty_score > 0 and score > 0:
+                        score = max(0, score - penalty_score)
                     
                     result = {
                         'question': eval_result['question'],
@@ -458,6 +467,12 @@ class Processor:
                         'raw_response': eval_result.get('raw_response', ''),
                         'processor_id': self.processor_id
                     }
+                    
+                    # 添加扣分信息
+                    if penalty_score > 0:
+                        result['heuristic_penalty'] = penalty_score
+                        result['heuristic_flags'] = heuristic_reasons
+                        result['original_score'] = original_score
                     
                     if 'error' in eval_result:
                         result['error'] = eval_result['error']
@@ -472,11 +487,17 @@ class Processor:
                             logger.error(f"[ERROR] {image_name} | Score: -1 | Reason: {str(error_msg)[:100]}")
                         else:
                             result['filter_reason'] = f"Score below threshold ({score} < {self.config.SCORE_THRESHOLD})"
-                            logger.warning(f"[FILTERED] {image_name} | Score: {score} | Threshold: {self.config.SCORE_THRESHOLD}")
+                            if penalty_score > 0:
+                                logger.warning(f"[FILTERED] {image_name} | Original: {original_score} | Penalty: -{penalty_score} | Final: {score} | Threshold: {self.config.SCORE_THRESHOLD}")
+                            else:
+                                logger.warning(f"[FILTERED] {image_name} | Score: {score} | Threshold: {self.config.SCORE_THRESHOLD}")
                         self.filtered_count += 1
                     else:
                         result['filtered'] = False
-                        logger.info(f"[KEPT] {image_name} | Score: {score}")
+                        if penalty_score > 0:
+                            logger.info(f"[KEPT] {image_name} | Original: {original_score} | Penalty: -{penalty_score} | Final: {score}")
+                        else:
+                            logger.info(f"[KEPT] {image_name} | Score: {score}")
                     
                     results.append(result)
                 

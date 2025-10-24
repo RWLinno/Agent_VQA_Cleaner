@@ -30,7 +30,9 @@ OUTPUT_FILE="./output/2D/choice_qa_cleaned.jsonl"
 # JSON_FILE="$BASE_2D/reasoning_template_qa_2D_qwenvl.json"
 # OUTPUT_FILE="./output/2D/reasoning_template_qa_cleaned.jsonl"
 
-ROOT_PATH="$BASE_2D/images/"
+# 注意：ROOT_PATH 应该指向包含 images/ 目录的父目录
+# 因为JSON中的image字段已经包含了 "images/" 前缀
+ROOT_PATH="$BASE_2D/"
 
 # 【3D数据示例 - 如需使用3D数据，请使用 quick_start_3d.sh】
 # BASE_3D="/mnt/data/datasets/transferred_datasets/datasets_train/refspatial/3D"

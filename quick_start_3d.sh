@@ -38,7 +38,8 @@ OUTPUT_FILE="./output/3D/choice_qa_cleaned.jsonl"
 # OUTPUT_FILE="./output/3D/vacant_qa_cleaned.jsonl"
 
 # ROOT_PATH 统一指向 3D 根目录
-ROOT_PATH="$BASE_3D/images/"
+# 注意：应该指向包含 images/ 和 depth/ 目录的父目录
+ROOT_PATH="$BASE_3D/"
 
 # 创建输出目录
 mkdir -p ./output/3D

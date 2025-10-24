@@ -88,7 +88,7 @@ class Config:
     MAX_RETRIES = 3  # 失败重试次数
     
     # 评分阈值
-    SCORE_THRESHOLD = 5  # 低于此分数的数据将被过滤
+    SCORE_THRESHOLD = 6  # 低于此分数的数据将被过滤
     
     # 系统提示词 - 图像质量+问题质量评估
     SYSTEM_PROMPT_IMAGE_QUESTION = """

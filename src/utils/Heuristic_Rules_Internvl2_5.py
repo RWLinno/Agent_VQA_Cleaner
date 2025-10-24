@@ -44,16 +44,20 @@ def check_unique_word_ratio(text: str, min_ratio: float = 0.3) -> bool:
     return unique_ratio < min_ratio
 
 
-def check_special_char_ratio(text: str, max_ratio: float = 0.1) -> bool:
+def check_special_char_ratio(text: str, max_ratio: float = 0.3) -> bool:
     """
     Check if the text contains too many special characters.
     
     Returns True if special character ratio exceeds the threshold.
+    
+    Note: 提高到30%以兼容坐标和选项格式，如 (A), (0.123, 0.456)
     """
     if len(text) == 0:
         return False
-    special_chars = sum(1 for char in text if not char.isalnum() and not char.isspace())
-    ratio = special_chars / len(text)
+    # 排除常见的合法特殊字符：括号、逗号、句号、问号等
+    # 只计算真正异常的特殊字符
+    abnormal_chars = sum(1 for char in text if char in ['|', '{', '}', '[', ']', '\\', '^', '~', '`'])
+    ratio = abnormal_chars / len(text) if len(text) > 0 else 0
     return ratio > max_ratio
 
 
