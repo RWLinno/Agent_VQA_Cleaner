@@ -2,8 +2,7 @@
 ./datasets/
 
 # keep token!
-quick_start_eas.sh
-*.sh
+**eas.sh
 
 # Python
 __pycache__/

@@ -1,26 +1,42 @@
-# AgentCleaner - VQA数据智能清洗系统
+# AgentCleaner - VQA数据智能清洗与点位验证系统
 
-基于多模态大模型（VLM）的视觉问答（VQA）数据质量评估与清洗系统。通过多个开源模型协同工作，自动过滤低质量数据，保留高质量的训练样本。
+基于多模态大模型（VLM）的视觉问答（VQA）数据质量评估与清洗系统，支持通用VQA数据清洗和点定位任务的专项验证。
 
 ## ✨ 主要特性
 
 ### 🎯 核心功能
+
+#### 1. VQA数据质量评估与清洗
 - **多模态质量评估**: 使用 VLM 评估图像质量、问题合理性和答案准确性
 - **智能路径查找**: 自动在多个子目录中查找图像和深度图
 - **3D数据支持**: 完整支持 RGB + 深度图的多模态数据处理
 - **启发式规则**: 自动检测重复模式、超长句子、尾部循环等问题
+- **点数据检测**: 自动识别并处理答案中的坐标点数据
+
+#### 2. 点定位任务验证（专项功能）
+- **点位精度验证**: 使用VLM重新推理验证标注点位的准确性
+- **负样本交叉验证**: 通过扰动生成负样本，验证模型判断的可靠性
+- **三重验证机制**: 点位匹配 + PointQA正确性 + 负样本识别
+- **详细失败分析**: 记录每个样本的失败原因，便于数据质量分析
+- **可视化对比**: 直观展示原始点、推理点、扰动点的位置关系
+
+#### 3. 系统特性
 - **并发处理**: 多处理器并行处理，充分利用GPU资源
 - **增量保存**: 自动保存中间结果，防止数据丢失
-- **双模式支持**: 支持本地模型和阿里云EAS API两种模式 🆕
+- **双模式支持**: 支持本地模型和阿里云EAS API两种模式
 
 ### 🚀 性能优势
 - **默认模型**: Qwen2.5-VL-3B-Instruct（仅3B参数，显存~8GB）
-- **云端部署**: 支持阿里云EAS API，无需本地GPU 🆕
-- **处理速度**: ~100-150 样本/分钟（4 GPUs, 8 processors）
-- **向后兼容**: 完全兼容 2D 数据处理
+- **云端部署**: 支持阿里云EAS API（如Qwen3-VL-235B），无需本地GPU
+- **处理速度**: 
+  - VQA清洗: ~100-150 样本/分钟（4 GPUs, 8 processors）
+  - 点位验证: ~60-90 样本/分钟（包含3次推理/样本）
 - **灵活配置**: 支持命令行、环境变量、配置文件多种配置方式
+- **完整可视化**: HTML报告直观展示验证结果和点位对比
 
 ### 📊 支持的数据格式
+
+#### VQA数据清洗
 
 | 数据集 | 类型 | 图像 | 深度图 | 支持状态 |
 |--------|------|------|--------|---------|
@@ -31,8 +47,28 @@
 | RefSpatial 3D | visual_choice_qa | 单图+bbox | ✅ | ✅ |
 | RefSpatial 3D | reasoning_template_qa | 单图 | ✅ | ✅ |
 | RefSpatial 3D | vacant_qa | 单图 | ✅ | ✅ |
+| 通用VQA | 自定义格式 | 单图/多图 | 可选 | ✅ |
+
+#### 点位验证（专项）
+
+| 任务类型 | 数据格式 | 验证方式 | 支持状态 |
+|---------|---------|---------|---------|
+| 点定位标注 | JSONL (messages格式) | 点位对比 + PointQA | ✅ |
+| 目标检测 | 带坐标答案 | 三重验证 | ✅ |
+| 关键点检测 | 多点标注 | 负样本交叉验证 | ✅ |
 
 ## 🚀 快速开始
+
+### 功能选择
+
+本系统提供两大功能模块：
+
+1. **VQA数据清洗** (`main.py`) - 通用VQA数据质量评估
+2. **点位验证** (`main_point_verification.py`) - 点定位任务的专项验证
+
+根据您的需求选择对应的功能。
+
+---
 
 ### 1. 环境准备
 
@@ -60,9 +96,11 @@ export NUM_PROCESSORS=8
 export BATCH_SIZE=4
 ```
 
-### 3. 运行数据清洗
+### 3. 运行功能
 
-#### 方式A: 2D数据清洗
+#### 功能A: VQA数据清洗
+
+##### 方式1: 2D数据清洗
 ```bash
 # 编辑 quick_start.sh 中的路径配置
 vim quick_start.sh
@@ -71,7 +109,7 @@ vim quick_start.sh
 ./quick_start.sh
 ```
 
-#### 方式B: 3D数据清洗（单个数据集）
+##### 方式2: 3D数据清洗（单个数据集）
 ```bash
 # 编辑 quick_start_3d.sh 中的路径配置
 vim quick_start_3d.sh
@@ -80,7 +118,7 @@ vim quick_start_3d.sh
 ./quick_start_3d.sh
 ```
 
-#### 方式C: 批量处理所有3D数据（推荐）⭐
+##### 方式3: 批量处理所有3D数据（推荐）⭐
 ```bash
 # 编辑 batch_clean_3d.sh 中的BASE_3D路径
 vim batch_clean_3d.sh
@@ -89,7 +127,7 @@ vim batch_clean_3d.sh
 ./batch_clean_3d.sh
 ```
 
-#### 方式D: 使用阿里云EAS API（无需本地GPU）🆕
+##### 方式4: 使用阿里云EAS API（无需本地GPU）
 ```bash
 # 编辑 quick_start_eas.sh 配置EAS服务信息
 vim quick_start_eas.sh
@@ -102,14 +140,89 @@ vim quick_start_eas.sh
 - ✅ 无需本地GPU资源
 - ✅ 支持超大规模模型（如235B参数）
 - ✅ 配置简单，只需API地址和token
-- 📖 详细说明请查看 [README_EAS.md](README_EAS.md)
+
+#### 功能B: 点位验证（点定位任务专用）
+
+用于验证点定位标注的准确性，包含负样本交叉验证。
+
+##### 快速测试（10个样本）
+
+```bash
+# 1. 配置EAS信息
+export AGENT_TYPE="eas"
+export EAS_BASE_URL="http://your-eas-url"
+export EAS_TOKEN="your-token"
+
+# 2. 运行测试
+./test_perturbation_verification.sh
+
+# 3. 查看结果
+firefox output/test_perturbation/visualization.html
+```
+
+##### 完整数据处理
+
+```bash
+# 基本用法
+python main_point_verification.py \
+    --input /path/to/data.jsonl \
+    --root_path /path/to/images \
+    --output output/verification_results.jsonl \
+    --num_workers 8
+
+# 启用所有验证功能（推荐）
+python main_point_verification.py \
+    --input /path/to/data.jsonl \
+    --root_path /path/to/images \
+    --output output/verification_results.jsonl \
+    --num_workers 8 \
+    --distance_threshold 50 \
+    --enable_perturbation true \
+    --perturbation_range 100
+
+# 生成可视化报告
+python visualize_point_verification.py \
+    --input output/verification_results.jsonl \
+    --output output/visualization.html \
+    --filter all \
+    --sample_size 50
+```
+
+**验证机制说明**：
+
+1. **点位对比**：VLM重新推理生成点P2，与原标注点P1对比距离
+2. **PointQA验证**：让模型判断原标注点P1是否正确
+3. **负样本验证**：生成扰动点P1'（故意错误），验证模型能否识别错误
+4. **三重筛选**：只有同时通过以上三项验证的数据才保留
+
+**关键指标**：
+- **点位匹配率**：P1和P2距离<阈值的比例（期望60-80%）
+- **PointQA正确率**：P1被判定正确的比例（期望50-70%）
+- **负样本检测率**：能正确识别P1'错误的比例（期望>70%，关键指标）
+- **严格筛选通过率**：三重验证都通过的比例（期望30-50%）
 
 ### 4. 查看结果
+
+#### VQA清洗结果
 
 清洗完成后，会生成以下文件：
 - `*_cleaned.jsonl`: 清洗后的高质量数据（用于训练）
 - `*_full.jsonl`: 完整评估结果（包含所有元数据）
 - `*_system_prompt.txt`: 使用的评估提示词
+
+#### 点位验证结果
+
+验证完成后，会生成：
+- `*_results.jsonl`: 完整验证结果（包含点位对比、PointQA验证、负样本检测）
+- `*_verification.log`: 详细日志
+- `visualization.html`: 可视化报告（显示P1/P2/P1'三个点的位置）
+
+**可视化说明**：
+- 🔴 **P1（红色）**：原始标注点（正样本）
+- 🟢 **P2（绿色）**：VLM推理生成的点
+- 🟠 **P1'（橙色）**：扰动点（负样本，用于验证可靠性）
+- 黄色虚线：P1↔P2（距离越短越好）
+- 橙色虚线：P1↔P1'（扰动距离）
 
 ## 📂 数据配置指南
 
@@ -164,7 +277,9 @@ ROOT_PATH="$BASE_3D/"  # 重要：指向根目录！
 
 ## 🎯 命令行使用
 
-### 基本用法
+### VQA数据清洗 (main.py)
+
+#### 基本用法
 
 ```bash
 python main.py \
@@ -206,7 +321,7 @@ python main.py \
     --score_threshold 6
 ```
 
-### 禁用启发式规则
+#### 禁用启发式规则
 
 ```bash
 python main.py \
@@ -216,9 +331,113 @@ python main.py \
     --no_heuristic  # 只使用VLM评分
 ```
 
+---
+
+### 点位验证 (main_point_verification.py)
+
+#### 基本用法
+
+```bash
+python main_point_verification.py \
+    --input /path/to/data.jsonl \
+    --root_path /path/to/images/ \
+    --output ./output/verification_results.jsonl
+```
+
+#### 启用负样本验证（推荐）
+
+```bash
+python main_point_verification.py \
+    --input data.jsonl \
+    --root_path /path/to/images/ \
+    --output output.jsonl \
+    --enable_perturbation true \
+    --perturbation_range 100
+```
+
+#### 调整验证参数
+
+```bash
+python main_point_verification.py \
+    --input data.jsonl \
+    --root_path /path/to/images/ \
+    --output output.jsonl \
+    --distance_threshold 50 \
+    --enable_perturbation true \
+    --perturbation_range 100 \
+    --num_workers 8
+```
+
+#### 禁用负样本验证（快速模式）
+
+```bash
+python main_point_verification.py \
+    --input data.jsonl \
+    --root_path /path/to/images/ \
+    --output output.jsonl \
+    --enable_perturbation false  # 禁用扰动验证
+```
+
+#### 处理指定范围
+
+```bash
+# 只处理前100条数据
+python main_point_verification.py \
+    --input data.jsonl \
+    --root_path /path/to/images/ \
+    --output output.jsonl \
+    --start 0 \
+    --end 100
+```
+
+---
+
+### 可视化工具 (visualize_point_verification.py)
+
+#### 生成可视化报告
+
+```bash
+# 显示所有样本
+python visualize_point_verification.py \
+    --input verification_results.jsonl \
+    --output visualization_all.html \
+    --filter all
+
+# 只显示通过严格筛选的样本
+python visualize_point_verification.py \
+    --input verification_results.jsonl \
+    --output visualization_pass.html \
+    --filter strict_pass
+
+# 只显示失败的样本（重点分析）
+python visualize_point_verification.py \
+    --input verification_results.jsonl \
+    --output visualization_fail.html \
+    --filter strict_fail
+
+# 只显示负样本检测失败的（验证不可靠的）
+python visualize_point_verification.py \
+    --input verification_results.jsonl \
+    --output visualization_neg_fail.html \
+    --filter negative_failed
+```
+
+#### 过滤模式说明
+
+| 模式 | 说明 | 用途 |
+|------|------|------|
+| `all` | 显示所有样本 | 整体浏览 |
+| `matched` | 点位匹配的样本 | 查看P1和P2接近的 |
+| `mismatched` | 点位不匹配的样本 | 查看P1和P2距离远的 |
+| `correct` | PointQA判定正确的 | 查看被认为准确的标注 |
+| `incorrect` | PointQA判定不正确的 | 查看被认为错误的标注 |
+| `strict_pass` | 通过严格筛选的 | 高质量数据 |
+| `strict_fail` | 未通过严格筛选的 | 需要重点分析 |
+| `negative_failed` | 负样本检测失败的 | 验证不可靠的样本 |
+
 ## ⚙️ 配置参数
 
-### 命令行参数
+### VQA清洗参数 (main.py)
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
@@ -235,6 +454,38 @@ python main.py \
 | `--no_heuristic` | 禁用启发式规则 | False |
 | `--log_level` | 日志级别 | INFO |
 | `--log_file` | 日志文件路径 | None |
+
+### 点位验证参数 (main_point_verification.py)
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--input` | 输入JSONL文件路径 | 必需 |
+| `--root_path` | 图像根目录路径 | 必需 |
+| `--output` | 输出JSONL文件路径 | 必需 |
+| `--num_workers` | 并行worker数量 | 4 |
+| `--distance_threshold` | 点位距离阈值（像素） | 50.0 |
+| `--enable_perturbation` | 启用点位扰动验证 | True |
+| `--perturbation_range` | 扰动范围（像素） | 100 |
+| `--start` | 起始索引 | 0 |
+| `--end` | 结束索引 | None |
+| `--log_level` | 日志级别 | INFO |
+| `--log_file` | 日志文件路径 | None |
+
+**参数说明**：
+
+- `distance_threshold`: P1和P2的最大允许距离，超过视为不匹配
+- `enable_perturbation`: 是否启用负样本验证（推荐开启）
+- `perturbation_range`: 扰动点与原点的距离范围
+
+### 可视化参数 (visualize_point_verification.py)
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--input` | 输入JSONL文件路径 | 必需 |
+| `--output` | 输出HTML文件路径 | 必需 |
+| `--sample_size` | 抽样数量 | 50 |
+| `--filter` | 过滤模式 | all |
+| `--seed` | 随机种子 | 42 |
 
 ### 环境变量
 
@@ -295,75 +546,136 @@ export PRIMARY_MODEL=/path/to/model
 ## 🏗️ 项目结构
 
 ```
-AgentCleaner/
-├── main.py                     # 主程序入口
-├── quick_start.sh              # 2D数据一键启动（本地模型）
-├── quick_start_3d.sh           # 3D数据一键启动（本地模型）
-├── quick_start_eas.sh          # EAS API一键启动 🆕
-├── batch_clean_3d.sh           # 批量处理所有3D数据 ⭐
-├── requirements.txt            # 依赖列表
-├── README.md                   # 主文档
-├── README_EAS.md               # EAS使用说明 🆕
+Agent_VQA_Cleaner/
+├── main.py                              # VQA数据清洗主程序
+├── main_point_verification.py           # 点位验证主程序
+├── visualize_samples.py                 # VQA清洗结果可视化
+├── visualize_point_verification.py      # 点位验证结果可视化
+├── requirements.txt                     # 依赖列表
+├── README.md                            # 本文档
 │
-├── src/                        # 源代码
-│   ├── config.py              # 配置管理（支持EAS配置）
-│   ├── base/                  # 核心组件
-│   │   ├── vlm_agent.py       # VLM Agent（本地模型）
-│   │   ├── vlm_agent_eas.py   # VLM Agent（EAS API）🆕
-│   │   ├── processor.py       # 数据处理器（智能路径查找）
-│   │   └── unified_manager.py # 统一管理器（支持双模式）
-│   └── utils/                 # 工具函数
-│       ├── Data_Selector.py   # 数据选择器
+├── quick_start.sh                       # 2D数据清洗快速启动
+├── quick_start_3d.sh                    # 3D数据清洗快速启动
+├── quick_start_eas.sh                   # EAS API清洗快速启动
+├── batch_clean_3d.sh                    # 批量处理3D数据
+├── test_perturbation_verification.sh    # 点位验证快速测试
+│
+├── src/                                 # 源代码
+│   ├── config.py                        # 配置管理
+│   ├── base/                            # 核心组件
+│   │   ├── vlm_agent.py                 # VLM Agent（本地模型）
+│   │   ├── vlm_agent_eas.py             # VLM Agent（EAS API）
+│   │   ├── processor.py                 # VQA数据处理器
+│   │   ├── point_verification_processor.py  # 点位验证处理器
+│   │   └── unified_manager.py           # 统一管理器
+│   └── utils/                           # 工具函数
+│       ├── Data_Selector.py             # 数据选择器
 │       └── Heuristic_Rules_Internvl2_5.py  # 启发式规则
 │
-├── scripts/                    # 辅助脚本
-│   ├── extract_fields.py      # 字段提取工具
-│   ├── batch_process.sh       # 多GPU批处理
-│   └── analyze_results.py     # 结果分析
+├── scripts/                             # 辅助脚本
+│   ├── extract_fields.py                # 字段提取工具
+│   ├── batch_process.sh                 # 多GPU批处理
+│   └── analyze_results.py               # 结果分析
 │
-├── output/                     # 输出目录
-│   ├── 2D/                    # 2D数据输出（本地）
-│   ├── 2D_eas/                # 2D数据输出（EAS）🆕
-│   ├── 2D_ex/                 # 2D提取字段输出
-│   ├── 3D/                    # 3D数据输出（本地）
-│   └── 3D_eas/                # 3D数据输出（EAS）🆕
+├── output/                              # 输出目录
+│   ├── 2D/                              # 2D清洗输出
+│   ├── 3D/                              # 3D清洗输出
+│   ├── washing_machine/                 # 洗衣机数据清洗输出
+│   └── test_perturbation/               # 点位验证测试输出
 │
-├── examples/                   # 示例数据
-│   ├── choice_qa_test.json    # 测试数据
-│   ├── images/                # 测试图像
-│   └── test_example.sh        # 测试脚本
-│
-└── logs/                       # 日志目录
+└── examples/                            # 示例数据
+    ├── choice_qa_test.json              # 测试数据
+    └── images/                          # 测试图像
 ```
 
-## 🆕 最新改进 (v2.2.0)
+## 📚 点位验证详解
 
-**更新日期：** 2025-11-04
+### 什么是点位验证？
 
-### 核心改进
+点位验证是针对**点定位标注任务**的专项质量评估功能，用于：
+- 验证标注点位的准确性
+- 检测标注数据的系统性错误
+- 通过负样本交叉验证确保评估可靠性
 
-1. **详细的过滤原因** - 不再只说"分数低于阈值"，而是告诉你为什么打了低分
-2. **模型响应字段** - `raw_response` → `model_response`，更清晰准确
-3. **点数据自动检测** - 自动检测并过滤答案中的坐标点（超过5个点打0分）
-4. **可视化工具** - 新增 `visualize_samples.py`，支持HTML展示和点坐标绘制
+### 验证流程
 
-### 快速使用
-
-```bash
-# 数据清洗后生成可视化报告
-python visualize_samples.py \
-    --input output/cleaned_full.jsonl \
-    --output visualization.html \
-    --filter filtered \
-    --sample_size 50
+```
+输入: 标注数据（包含问题、图片、答案中的点坐标）
+  ↓
+Step 1: 提取原始标注点P1
+  ↓
+Step 2: VLM重新推理生成点P2
+  ↓
+Step 3: 计算P1和P2的距离 → 点位匹配
+  ↓
+Step 4: PointQA验证P1是否正确 → 标注准确性
+  ↓
+Step 5: 生成扰动点P1'（故意错误）
+  ↓
+Step 6: PointQA验证P1'是否被识别为错误 → 验证可靠性
+  ↓
+Step 7: 三重判定
+  - P1和P2距离 < 阈值 ✓
+  - PointQA判定P1正确 ✓
+  - PointQA判定P1'不正确 ✓
+  ↓
+输出: 通过/失败 + 详细原因
 ```
 
-### 详细文档
+### 为什么需要负样本验证？
 
-- 📖 [改进说明](./IMPROVEMENTS.md) - 详细的功能说明和实现细节
-- 🚀 [快速开始](./QUICK_START_IMPROVEMENTS.md) - 新功能使用指南
-- 📝 [改进摘要](./CHANGES_SUMMARY.md) - 简明的改动总结
-- 🧪 [功能测试](./test_improvements.py) - 运行测试验证功能
+**问题场景**：如果标注点P1和推理点P2都错了但恰好距离很近怎么办？
+
+**解决方案**：通过扰动生成明显错误的点P1'，验证模型能否正确识别错误
+- 如果P1'被判定为不正确 → 模型判断可靠 ✓
+- 如果P1'也被判定为正确 → 模型判断不可靠 ✗（过滤该数据）
+
+**关键优势**：
+- 避免"两个错误点恰好接近"的误判
+- 确保PointQA验证的可靠性
+- 提供更严格的数据质量保证
+
+### 输出数据格式
+
+```json
+{
+  "id": "sample_001",
+  "question": "Point to the power button...",
+  "label": "power button",
+  
+  "point_original": {
+    "coordinates": [420.91, 263.16]
+  },
+  
+  "point_inferred": {
+    "coordinates": [425.0, 265.0],
+    "success": true
+  },
+  
+  "point_comparison": {
+    "distance": 5.12,
+    "match": true,
+    "threshold": 50.0
+  },
+  
+  "pointqa_verification": {
+    "is_correct": true,
+    "confidence": 8.5
+  },
+  
+  "perturbation_verification": {
+    "perturbed_point": [520.5, 350.2],
+    "distance_from_original": 115.3,
+    "is_correct": false,
+    "negative_detected": true
+  },
+  
+  "strict_filtering": {
+    "pass": true,
+    "fail_reasons": []
+  }
+}
+```
 
 ---
 
@@ -653,18 +965,43 @@ python test_eas_connection.py
 - 故障排查指南
 - 成本控制建议
 
+## 💡 使用建议
+
+### VQA数据清洗
+
+1. **先测试少量数据**（100条）确认配置正确
+2. **查看可视化结果**了解过滤原因
+3. **调整阈值**平衡质量和数量
+4. **批量处理**完整数据集
+
+### 点位验证
+
+1. **快速测试**（10条）验证功能：`./test_perturbation_verification.sh`
+2. **查看统计指标**：重点关注负样本检测率（期望>70%）
+3. **分析失败样本**：查看`strict_fail`和`negative_failed`的可视化
+4. **调整参数**：
+   - 负样本检测率低 → 增大`perturbation_range`或检查label定义
+   - 通过率过低 → 放宽`distance_threshold`或禁用`enable_perturbation`
+5. **全量处理**：确认效果后处理完整数据集
+
+### 参数调优
+
+| 场景 | distance_threshold | perturbation_range | enable_perturbation |
+|------|-------------------|-------------------|---------------------|
+| 精确定位任务 | 30 | 80 | true |
+| 一般定位任务 | 50 | 100 | true |
+| 粗略定位任务 | 80 | 120 | true |
+| 快速验证模式 | 50 | - | false |
+
+---
+
 ## 📄 许可证
 
 本项目遵循 MIT 许可证。
 
 ## 🙏 致谢
 
-- Qwen2.5-VL 模型团队
+- Qwen2.5-VL / Qwen3-VL 模型团队
 - InternVL 模型团队
 - 阿里云PAI-EAS团队
 - 所有开源贡献者
-
----
-
-**更新日期**: 2025-10-24  
-**版本**: 2.1.0 (新增EAS支持)

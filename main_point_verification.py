@@ -82,11 +82,15 @@ def run_parallel(
     root_path: str,
     vlm_agent,
     config,
-    num_workers: int = 4
+    num_workers: int = 4,
+    distance_threshold: float = 50.0,
+    enable_perturbation: bool = True,
+    perturbation_range: int = 100
 ) -> List[Dict[str, Any]]:
     """并行处理数据"""
     logger = logging.getLogger(__name__)
     logger.info(f"开始并行处理 {len(data)} 条数据，使用 {num_workers} 个worker")
+    logger.info(f"配置: 距离阈值={distance_threshold}px, 扰动验证={enable_perturbation}, 扰动范围={perturbation_range}px")
     
     # 创建处理器
     processors = []
@@ -95,7 +99,9 @@ def run_parallel(
             processor_id=i,
             vlm_agent=vlm_agent,
             config=config,
-            distance_threshold=float(os.environ.get('POINT_DISTANCE_THRESHOLD', '50'))
+            distance_threshold=distance_threshold,
+            enable_perturbation=enable_perturbation,
+            perturbation_range=perturbation_range
         )
         processors.append(processor)
     
@@ -128,19 +134,31 @@ def run_parallel(
                 logger.error(f"收集结果时出错: {e}")
     
     # 打印统计信息
-    logger.info("\n" + "=" * 60)
-    logger.info("处理统计信息")
-    logger.info("=" * 60)
+    logger.info("\n" + "=" * 70)
+    logger.info("各Worker处理统计")
+    logger.info("=" * 70)
     for processor in processors:
         stats = processor.get_statistics()
+        logger.info(f"\n📊 Processor {stats['processor_id']}:")
+        logger.info(f"  总处理: {stats['processed']} 条")
         logger.info(
-            f"Processor {stats['processor_id']}: "
-            f"处理={stats['processed']}, "
-            f"匹配={stats['point_match']}, "
-            f"不匹配={stats['point_mismatch']}, "
-            f"匹配率={stats['match_rate']:.1f}%"
+            f"  点位匹配: {stats['point_comparison']['match']}/{stats['processed']} "
+            f"({stats['point_comparison']['match_rate']:.1f}%)"
         )
-    logger.info("=" * 60 + "\n")
+        logger.info(
+            f"  PointQA正确: {stats['pointqa_verification']['correct']}/{stats['processed']} "
+            f"({stats['pointqa_verification']['correct_rate']:.1f}%)"
+        )
+        if enable_perturbation:
+            logger.info(
+                f"  负样本检测: {stats['negative_sample']['detected']}/{stats['processed']} "
+                f"({stats['negative_sample']['detect_rate']:.1f}%)"
+            )
+        logger.info(
+            f"  严格筛选通过: {stats['strict_filtering']['pass']}/{stats['processed']} "
+            f"({stats['strict_filtering']['pass_rate']:.1f}%)"
+        )
+    logger.info("=" * 70 + "\n")
     
     return all_results
 
@@ -180,6 +198,18 @@ def main():
         type=float,
         default=50.0,
         help='点位距离阈值（像素） (默认: 50)'
+    )
+    parser.add_argument(
+        '--enable_perturbation',
+        type=lambda x: x.lower() == 'true',
+        default=True,
+        help='是否启用点位扰动验证 (默认: True)'
+    )
+    parser.add_argument(
+        '--perturbation_range',
+        type=int,
+        default=100,
+        help='点位扰动范围（像素） (默认: 100)'
     )
     parser.add_argument(
         '--start',
@@ -266,7 +296,10 @@ def main():
             root_path=args.root_path,
             vlm_agent=vlm_agent,
             config=Config,
-            num_workers=args.num_workers
+            num_workers=args.num_workers,
+            distance_threshold=args.distance_threshold,
+            enable_perturbation=args.enable_perturbation,
+            perturbation_range=args.perturbation_range
         )
         
         # 保存结果
@@ -277,16 +310,30 @@ def main():
         # 统计信息
         total = len(results)
         matched = sum(1 for r in results if r.get('point_comparison', {}).get('match', False))
-        correct = sum(1 for r in results if r.get('pointqa_verification', {}).get('is_correct', False))
+        pointqa_correct = sum(1 for r in results if r.get('pointqa_verification', {}).get('is_correct', False))
+        negative_detected = sum(1 for r in results if r.get('perturbation_verification', {}).get('negative_detected', False))
+        strict_pass = sum(1 for r in results if r.get('strict_filtering', {}).get('pass', False))
         errors = sum(1 for r in results if r.get('status') == 'error')
         
         logger.info("\n" + "=" * 70)
-        logger.info("最终统计")
+        logger.info("📊 最终统计汇总")
         logger.info("=" * 70)
-        logger.info(f"总处理数据: {total}")
-        logger.info(f"点位匹配: {matched} ({matched/total*100:.1f}%)")
-        logger.info(f"PointQA正确: {correct} ({correct/total*100:.1f}%)")
-        logger.info(f"处理错误: {errors}")
+        logger.info(f"总处理数据: {total} 条")
+        logger.info(f"")
+        logger.info(f"🎯 点位匹配: {matched}/{total} ({matched/total*100:.1f}%)")
+        logger.info(f"   - P1和P2距离 < {args.distance_threshold}px")
+        logger.info(f"")
+        logger.info(f"✅ PointQA正确: {pointqa_correct}/{total} ({pointqa_correct/total*100:.1f}%)")
+        logger.info(f"   - 原始点P1指向正确位置")
+        logger.info(f"")
+        if args.enable_perturbation:
+            logger.info(f"🔍 负样本检测: {negative_detected}/{total} ({negative_detected/total*100:.1f}%)")
+            logger.info(f"   - 能正确识别扰动点P1'为错误")
+            logger.info(f"")
+        logger.info(f"⭐ 严格筛选通过: {strict_pass}/{total} ({strict_pass/total*100:.1f}%)")
+        logger.info(f"   - 同时满足所有验证条件")
+        logger.info(f"")
+        logger.info(f"❌ 处理错误: {errors}")
         logger.info("=" * 70)
         
         logger.info("\n✓ 点位验证完成！")

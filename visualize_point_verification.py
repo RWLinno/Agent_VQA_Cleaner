@@ -64,6 +64,15 @@ def sample_data(
     elif filter_mode == 'incorrect':
         # 只选择PointQA验证不正确的数据
         data = [d for d in data if not d.get('pointqa_verification', {}).get('is_correct', True)]
+    elif filter_mode == 'strict_pass':
+        # 只选择通过严格筛选的数据
+        data = [d for d in data if d.get('strict_filtering', {}).get('pass', False)]
+    elif filter_mode == 'strict_fail':
+        # 只选择未通过严格筛选的数据
+        data = [d for d in data if not d.get('strict_filtering', {}).get('pass', True)]
+    elif filter_mode == 'negative_failed':
+        # 只选择未能识别负样本的数据
+        data = [d for d in data if not d.get('perturbation_verification', {}).get('negative_detected', True)]
     
     if len(data) <= sample_size:
         return data
@@ -87,9 +96,19 @@ def generate_html_visualization(
     match_rate = (matched_count / total_count * 100) if total_count > 0 else 0
     
     # PointQA验证统计
-    correct_count = sum(1 for s in samples if s.get('pointqa_verification', {}).get('is_correct', False))
-    incorrect_count = total_count - correct_count
-    correct_rate = (correct_count / total_count * 100) if total_count > 0 else 0
+    pointqa_correct_count = sum(1 for s in samples if s.get('pointqa_verification', {}).get('is_correct', False))
+    pointqa_incorrect_count = total_count - pointqa_correct_count
+    pointqa_correct_rate = (pointqa_correct_count / total_count * 100) if total_count > 0 else 0
+    
+    # 负样本检测统计
+    negative_detected_count = sum(1 for s in samples if s.get('perturbation_verification', {}).get('negative_detected', False))
+    negative_failed_count = total_count - negative_detected_count
+    negative_detect_rate = (negative_detected_count / total_count * 100) if total_count > 0 else 0
+    
+    # 严格筛选统计
+    strict_pass_count = sum(1 for s in samples if s.get('strict_filtering', {}).get('pass', False))
+    strict_fail_count = total_count - strict_pass_count
+    strict_pass_rate = (strict_pass_count / total_count * 100) if total_count > 0 else 0
     
     # 平均距离
     distances = [s.get('point_comparison', {}).get('distance', 0) 
@@ -268,6 +287,15 @@ def generate_html_visualization(
         }}
         .p1-color {{ background-color: red; }}
         .p2-color {{ background-color: #00ff00; }}
+        .p1-prime-color {{ background-color: #ff6b00; }}
+        .badge-strict-pass {{
+            background-color: #c3e6cb;
+            color: #155724;
+        }}
+        .badge-strict-fail {{
+            background-color: #f5c6cb;
+            color: #721c24;
+        }}
     </style>
 </head>
 <body>
@@ -293,16 +321,32 @@ def generate_html_visualization(
                 <div class="stat-label">平均距离</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value">{correct_count}</div>
-                <div class="stat-label">PointQA正确 ({correct_rate:.1f}%)</div>
+                <div class="stat-value">{pointqa_correct_count}</div>
+                <div class="stat-label">PointQA正确 ({pointqa_correct_rate:.1f}%)</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value">{incorrect_count}</div>
-                <div class="stat-label">PointQA不正确 ({100-correct_rate:.1f}%)</div>
+                <div class="stat-value">{pointqa_incorrect_count}</div>
+                <div class="stat-label">PointQA不正确 ({100-pointqa_correct_rate:.1f}%)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{negative_detected_count}</div>
+                <div class="stat-label">负样本检测成功 ({negative_detect_rate:.1f}%)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{negative_failed_count}</div>
+                <div class="stat-label">负样本检测失败 ({100-negative_detect_rate:.1f}%)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{strict_pass_count}</div>
+                <div class="stat-label">严格筛选通过 ({strict_pass_rate:.1f}%)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{strict_fail_count}</div>
+                <div class="stat-label">严格筛选失败 ({100-strict_pass_rate:.1f}%)</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value">{avg_confidence:.1f}/10</div>
-                <div class="stat-label">平均置信度</div>
+                <div class="stat-label">平均PointQA置信度</div>
             </div>
         </div>
     </div>
@@ -311,14 +355,24 @@ def generate_html_visualization(
         <strong>🎨 图例说明：</strong><br>
         <div class="legend-item">
             <span class="legend-color p1-color"></span>
-            <strong>P1 (红色)</strong>: 原始标注点
+            <strong>P1 (红色)</strong>: 原始标注点（正样本）
         </div>
         <div class="legend-item">
             <span class="legend-color p2-color"></span>
             <strong>P2 (绿色)</strong>: VLM推理点
         </div>
+        <div class="legend-item">
+            <span class="legend-color p1-prime-color"></span>
+            <strong>P1' (橙色)</strong>: 扰动点（负样本）
+        </div>
         <div style="margin-top: 10px;">
-            <strong>说明：</strong>两个点越接近，说明VLM推理越准确
+            <strong>验证逻辑：</strong>
+            <ul style="margin: 5px 0; padding-left: 20px;">
+                <li>P1和P2距离近 → 点位匹配</li>
+                <li>PointQA判定P1正确 → 标注准确</li>
+                <li>PointQA判定P1'不正确 → 能识别错误</li>
+                <li>三者同时满足 → 通过严格筛选</li>
+            </ul>
         </div>
     </div>
 """
@@ -334,13 +388,22 @@ def generate_html_visualization(
         p2_info = sample.get('point_inferred', {})
         comparison = sample.get('point_comparison', {})
         verification = sample.get('pointqa_verification', {})
+        perturbation = sample.get('perturbation_verification', {})
+        strict = sample.get('strict_filtering', {})
         
         p1 = p1_info.get('coordinates', [0, 0])
         p2 = p2_info.get('coordinates')
+        p1_prime = perturbation.get('perturbed_point')
+        
         distance = comparison.get('distance')
         match = comparison.get('match', False)
         is_correct = verification.get('is_correct', False)
         confidence = verification.get('confidence', 0)
+        
+        negative_detected = perturbation.get('negative_detected', False)
+        perturbed_distance = perturbation.get('distance_from_original')
+        strict_pass = strict.get('pass', False)
+        fail_reasons = strict.get('fail_reasons', [])
         
         # 获取图像路径
         image_path = sample.get('full_image_path', '')
@@ -367,10 +430,16 @@ def generate_html_visualization(
         <div class="sample-header">
             <span class="sample-id">样本 #{idx}: {item_id}</span>
             <span class="badge {'badge-match' if match else 'badge-mismatch'}">
-                {'点位匹配' if match else '点位不匹配'}
+                {'✓ 点位匹配' if match else '✗ 点位不匹配'}
             </span>
             <span class="badge {'badge-correct' if is_correct else 'badge-incorrect'}">
-                {'PointQA: 正确' if is_correct else 'PointQA: 不正确'}
+                {'✓ PointQA正确' if is_correct else '✗ PointQA不正确'}
+            </span>
+            <span class="badge {'badge-correct' if negative_detected else 'badge-incorrect'}">
+                {'✓ 负样本检测' if negative_detected else '✗ 负样本失败'}
+            </span>
+            <span class="badge {'badge-strict-pass' if strict_pass else 'badge-strict-fail'}">
+                {'⭐ 严格通过' if strict_pass else '⚠ 严格失败'}
             </span>
         </div>
 """
@@ -379,7 +448,8 @@ def generate_html_visualization(
         if image_data:
             points_data = {
                 'p1': p1,
-                'p2': p2 if p2 else None
+                'p2': p2 if p2 else None,
+                'p1_prime': p1_prime if p1_prime else None
             }
             
             html_content += f"""
@@ -435,7 +505,7 @@ def generate_html_visualization(
                     ctx.fillStyle = '#00ff00';
                     ctx.fillText('P2', points.p2[0] + 12, points.p2[1] + 20);
                     
-                    // 绘制连线
+                    // 绘制P1-P2连线（黄色虚线）
                     if (points.p1) {{
                         ctx.beginPath();
                         ctx.moveTo(points.p1[0], points.p1[1]);
@@ -443,6 +513,38 @@ def generate_html_visualization(
                         ctx.strokeStyle = 'yellow';
                         ctx.lineWidth = 2;
                         ctx.setLineDash([5, 5]);
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+                    }}
+                }}
+                
+                // 绘制P1'（扰动点/负样本，橙色）
+                if (points.p1_prime) {{
+                    ctx.beginPath();
+                    ctx.arc(points.p1_prime[0], points.p1_prime[1], 8, 0, 2 * Math.PI);
+                    ctx.fillStyle = '#ff6b00';
+                    ctx.fill();
+                    ctx.strokeStyle = 'white';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                    
+                    // 标签
+                    ctx.fillStyle = 'white';
+                    ctx.strokeStyle = '#cc5500';
+                    ctx.lineWidth = 4;
+                    ctx.font = 'bold 16px Arial';
+                    ctx.strokeText("P1'", points.p1_prime[0] + 12, points.p1_prime[1] + 35);
+                    ctx.fillStyle = '#ff6b00';
+                    ctx.fillText("P1'", points.p1_prime[0] + 12, points.p1_prime[1] + 35);
+                    
+                    // 绘制P1-P1'连线（橙色虚线）
+                    if (points.p1) {{
+                        ctx.beginPath();
+                        ctx.moveTo(points.p1[0], points.p1[1]);
+                        ctx.lineTo(points.p1_prime[0], points.p1_prime[1]);
+                        ctx.strokeStyle = '#ff6b00';
+                        ctx.lineWidth = 2;
+                        ctx.setLineDash([3, 3]);
                         ctx.stroke();
                         ctx.setLineDash([]);
                     }}
@@ -487,14 +589,47 @@ def generate_html_visualization(
         </div>
 """
         
-        # 显示PointQA验证信息
+        # 显示PointQA验证信息（正样本）
         pointqa_resp = verification.get('response', '')
         html_content += f"""
         <div class="verification-info">
-            <strong>🔍 PointQA验证:</strong><br>
+            <strong>🔍 PointQA验证 (正样本P1):</strong><br>
             • 结果: {'✅ 正确' if is_correct else '❌ 不正确'}<br>
             • 置信度: {confidence:.1f}/10<br>
             • 模型响应: {pointqa_resp[:200]}{"..." if len(pointqa_resp) > 200 else ""}
+        </div>
+"""
+        
+        # 显示扰动点验证信息（负样本）
+        if p1_prime:
+            perturbed_resp = perturbation.get('response', '')
+            perturbed_conf = perturbation.get('confidence', 0)
+            perturbed_correct = perturbation.get('is_correct', False)
+            
+            html_content += f"""
+        <div class="verification-info" style="background: #fff3e0; border-left-color: #ff9800;">
+            <strong>⚠️ 负样本验证 (扰动点P1'):</strong><br>
+            • P1'坐标: [{p1_prime[0]:.2f}, {p1_prime[1]:.2f}]<br>
+            • P1-P1'距离: {perturbed_distance:.2f}px<br>
+            • PointQA结果: {'❌ 判定为正确（验证失败）' if perturbed_correct else '✅ 判定为不正确（验证成功）'}<br>
+            • 置信度: {perturbed_conf:.1f}/10<br>
+            • 模型响应: {perturbed_resp[:150]}{"..." if len(perturbed_resp) > 150 else ""}
+        </div>
+"""
+        
+        # 显示严格筛选结果
+        html_content += f"""
+        <div class="comparison-info" style="background: {'#c3e6cb' if strict_pass else '#f5c6cb'}; border-left-color: {'#28a745' if strict_pass else '#dc3545'};">
+            <strong>⭐ 严格筛选结果:</strong><br>
+            • 最终判定: {'✅ 通过' if strict_pass else '❌ 失败'}<br>
+"""
+        
+        if not strict_pass and fail_reasons:
+            html_content += "            • 失败原因:<br>\n"
+            for reason in fail_reasons:
+                html_content += f"              &nbsp;&nbsp;- {reason}<br>\n"
+        
+        html_content += """
         </div>
 """
         
@@ -559,7 +694,8 @@ def main():
     parser.add_argument(
         '--filter',
         type=str,
-        choices=['all', 'matched', 'mismatched', 'correct', 'incorrect'],
+        choices=['all', 'matched', 'mismatched', 'correct', 'incorrect', 
+                 'strict_pass', 'strict_fail', 'negative_failed'],
         default='all',
         help='过滤模式 (默认: all)'
     )
