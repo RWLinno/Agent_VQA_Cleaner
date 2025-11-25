@@ -289,23 +289,28 @@ class VLMAgentEAS:
         """
         评估单个样本
         
+        注意：只有在system_prompt明确要求评估答案时，才应该传入answer参数
+        否则模型只根据问题和图片生成回答和评分
+        
         Args:
             question: 问题文本
             image_path: 图像路径
             depth_path: 深度图路径（可选）
-            answer: 答案文本（可选）
+            answer: 答案文本（可选，仅在include_answer=True时使用）
             system_prompt: 系统提示词
             
         Returns:
-            (score, raw_response) - 分数和原始响应
+            (score, model_response) - 分数和模型生成的回答
         """
-        # 构建提示
+        # 构建提示：只有明确传入answer时才包含答案
+        # 这确保模型在不应该看到答案时，会根据图片和问题生成自己的回答
         if answer:
             prompt_text = f"{system_prompt}{question}\n\nExpected answer: {answer}"
         else:
+            # 不包含答案，让模型根据图片和问题生成回答
             prompt_text = f"{system_prompt}{question}"
         
-        # 推理
+        # 推理 - 模型会返回评分和/或回答
         response = self.inference_single(prompt_text, image_path, depth_path)
         
         # 提取分数

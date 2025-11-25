@@ -149,6 +149,129 @@ class Processor:
                 result['depth_path'] = depth_path
             return result
     
+    def _count_coordinate_points(self, text: str) -> int:
+        """
+        检测答案中的点坐标数量
+        格式如: [195.52,253.12] 或 [195.52, 253.12]
+        
+        Args:
+            text: 要检测的文本
+            
+        Returns:
+            点的数量
+        """
+        import re
+        # 匹配形如 [数字,数字] 或 [数字, 数字] 的模式
+        pattern = r'\[\s*\d+\.?\d*\s*,\s*\d+\.?\d*\s*\]'
+        matches = re.findall(pattern, text)
+        return len(matches)
+    
+    def _extract_point_coordinates(self, text: str) -> List[Tuple[float, float]]:
+        """
+        提取文本中的点坐标
+        
+        Args:
+            text: 要提取的文本
+            
+        Returns:
+            点坐标列表 [(x1, y1), (x2, y2), ...]
+        """
+        import re
+        pattern = r'\[\s*(\d+\.?\d*)\s*,\s*(\d+\.?\d*)\s*\]'
+        matches = re.findall(pattern, text)
+        points = [(float(x), float(y)) for x, y in matches]
+        return points
+    
+    def _calculate_point_distance(self, p1: Tuple[float, float], p2: Tuple[float, float]) -> float:
+        """
+        计算两个点之间的欧式距离
+        
+        Args:
+            p1: 第一个点 (x1, y1)
+            p2: 第二个点 (x2, y2)
+            
+        Returns:
+            欧式距离
+        """
+        import math
+        return math.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
+    
+    def _verify_point_accuracy(
+        self,
+        question: str,
+        answer: str,
+        image_path: str,
+        depth_path: Optional[str] = None
+    ) -> Tuple[int, str]:
+        """
+        验证答案中点位的准确性
+        通过让模型重新推理并比较两次结果
+        
+        Args:
+            question: 问题文本
+            answer: 答案文本
+            image_path: 图像路径
+            depth_path: 深度图路径（可选）
+            
+        Returns:
+            (penalty_score, reason) - 扣分和原因
+        """
+        import os
+        
+        # 检查是否启用点位验证
+        if not os.environ.get('ENABLE_POINT_VERIFICATION', 'false').lower() == 'true':
+            return 0, ""
+        
+        # 提取原答案中的点位（P1）
+        points_original = self._extract_point_coordinates(answer)
+        if not points_original:
+            # 答案中没有点位，不需要验证
+            return 0, ""
+        
+        # 只取第一个点进行验证（假设是主要定位点）
+        p1 = points_original[0]
+        
+        try:
+            # 构建重新推理的prompt（不包含答案，让模型生成新的点位）
+            verification_prompt = f"{question}\nPlease provide the exact location as a coordinate point in the format [x, y]."
+            
+            # 让模型重新推理得到P2
+            response = self.vlm_agent.inference_single(
+                verification_prompt,
+                image_path,
+                depth_path
+            )
+            
+            # 提取模型推理的点位（P2）
+            points_inferred = self._extract_point_coordinates(response)
+            
+            if not points_inferred:
+                # 模型没有返回有效的点位，无法验证
+                logger.warning(f"模型未返回有效点位，无法验证。响应: {response[:100]}")
+                return 0, ""
+            
+            p2 = points_inferred[0]
+            
+            # 计算两个点之间的距离
+            distance = self._calculate_point_distance(p1, p2)
+            
+            # 获取距离阈值
+            threshold = float(os.environ.get('POINT_DISTANCE_THRESHOLD', '50'))
+            penalty = int(os.environ.get('POINT_VERIFICATION_PENALTY', '3'))
+            
+            if distance > threshold:
+                reason = f"Point location mismatch: original {p1} vs inferred {p2}, distance={distance:.1f}px (>{threshold}px)"
+                logger.warning(f"点位验证失败: {reason}")
+                return penalty, reason
+            else:
+                logger.debug(f"点位验证通过: 距离={distance:.1f}px")
+                return 0, ""
+                
+        except Exception as e:
+            logger.error(f"点位验证过程出错: {e}")
+            # 验证失败时不扣分，避免误判
+            return 0, ""
+    
     def apply_heuristic_rules(self, item: Dict[str, Any]) -> Tuple[int, List[str]]:
         """
         应用启发式规则检查 - 返回扣分和原因
@@ -167,6 +290,13 @@ class Processor:
         answer = item.get('answer', '')
         conversations = item.get('conversations', [])
         config = self.config.HEURISTIC_CONFIG
+        
+        # 规则0: 检测答案中的点数据数量（超过5个点直接判定为0分）
+        point_count = self._count_coordinate_points(answer)
+        if point_count > 5:
+            reasons.append(f"Too many coordinate points in answer ({point_count} > 5, force score to 0)")
+            # 返回一个极大的penalty_score确保最终得分为0
+            return 999, reasons
         
         # 规则1: 检查对话中的n-gram重复 (严重问题，扣3分)
         if check_conversations_repetition(
@@ -296,6 +426,14 @@ class Processor:
         if self.enable_heuristic:
             penalty_score, heuristic_reasons = self.apply_heuristic_rules(parsed)
         
+        # 验证点位准确性（如果启用）
+        point_penalty, point_reason = self._verify_point_accuracy(
+            question, answer, full_image_path, full_depth_path
+        )
+        if point_penalty > 0:
+            penalty_score += point_penalty
+            heuristic_reasons.append(point_reason)
+        
         try:
             score, raw_response = self.vlm_agent.evaluate_sample(
                 question=question,
@@ -314,13 +452,39 @@ class Processor:
                 result['original_score'] = original_score
             
             result['score'] = score
-            result['raw_response'] = raw_response
+            result['model_response'] = raw_response  # 改为model_response
             
             # 判断是否过滤并打印日志
             image_name = os.path.basename(image_rel_path) if image_rel_path else "unknown"
             if score < self.config.SCORE_THRESHOLD:
                 result['filtered'] = True
-                result['filter_reason'] = f"Score below threshold ({score} < {self.config.SCORE_THRESHOLD})"
+                
+                # 构建详细的filter_reason
+                reason_parts = []
+                
+                # 1. 如果有启发式规则触发，列出具体原因
+                if heuristic_reasons:
+                    reason_parts.append(f"Quality issues: {'; '.join(heuristic_reasons)}")
+                
+                # 2. 如果原始分数就低，说明VLM评估的问题
+                if original_score < self.config.SCORE_THRESHOLD:
+                    if original_score <= 3:
+                        reason_parts.append(f"VLM rated critically low (score: {original_score}/10) - likely due to image quality, question clarity, or answer accuracy issues")
+                    elif original_score <= 5:
+                        reason_parts.append(f"VLM rated below acceptable quality (score: {original_score}/10) - borderline or poor quality detected")
+                    else:
+                        reason_parts.append(f"VLM score slightly below threshold (score: {original_score}/10)")
+                
+                # 3. 如果是扣分后低于阈值
+                elif penalty_score > 0:
+                    reason_parts.append(f"Original VLM score {original_score}/10 reduced to {score}/10 after quality penalties")
+                
+                # 4. 组合成最终的filter_reason
+                if reason_parts:
+                    result['filter_reason'] = " | ".join(reason_parts)
+                else:
+                    result['filter_reason'] = f"Low quality score: {score}/10 (threshold: {self.config.SCORE_THRESHOLD}/10)"
+                
                 self.filtered_count += 1
                 if penalty_score > 0:
                     logger.warning(f"[FILTERED] {image_name} | Original: {original_score} | Penalty: -{penalty_score} | Final: {score} | Threshold: {self.config.SCORE_THRESHOLD}")
@@ -425,6 +589,14 @@ class Processor:
             if self.enable_heuristic:
                 penalty_score, heuristic_reasons = self.apply_heuristic_rules(parsed)
             
+            # 验证点位准确性（如果启用）
+            point_penalty, point_reason = self._verify_point_accuracy(
+                parsed['question'], parsed['answer'], full_image_path, full_depth_path
+            )
+            if point_penalty > 0:
+                penalty_score += point_penalty
+                heuristic_reasons.append(point_reason)
+            
             eval_item = {
                 'question': parsed['question'],
                 'answer': parsed['answer'],
@@ -464,7 +636,7 @@ class Processor:
                         'image_path': image_rel_path,
                         'full_image_path': eval_result['image_path'],
                         'score': score,
-                        'raw_response': eval_result.get('raw_response', ''),
+                        'model_response': eval_result.get('raw_response', ''),  # 改为model_response
                         'processor_id': self.processor_id
                     }
                     
@@ -486,7 +658,32 @@ class Processor:
                             result['filter_reason'] = f"Evaluation error: {error_msg}"
                             logger.error(f"[ERROR] {image_name} | Score: -1 | Reason: {str(error_msg)[:100]}")
                         else:
-                            result['filter_reason'] = f"Score below threshold ({score} < {self.config.SCORE_THRESHOLD})"
+                            # 构建详细的filter_reason（与process_single保持一致）
+                            reason_parts = []
+                            
+                            # 1. 如果有启发式规则触发，列出具体原因
+                            if heuristic_reasons:
+                                reason_parts.append(f"Quality issues: {'; '.join(heuristic_reasons)}")
+                            
+                            # 2. 如果原始分数就低，说明VLM评估的问题
+                            if original_score < self.config.SCORE_THRESHOLD:
+                                if original_score <= 3:
+                                    reason_parts.append(f"VLM rated critically low (score: {original_score}/10) - likely due to image quality, question clarity, or answer accuracy issues")
+                                elif original_score <= 5:
+                                    reason_parts.append(f"VLM rated below acceptable quality (score: {original_score}/10) - borderline or poor quality detected")
+                                else:
+                                    reason_parts.append(f"VLM score slightly below threshold (score: {original_score}/10)")
+                            
+                            # 3. 如果是扣分后低于阈值
+                            elif penalty_score > 0:
+                                reason_parts.append(f"Original VLM score {original_score}/10 reduced to {score}/10 after quality penalties")
+                            
+                            # 4. 组合成最终的filter_reason
+                            if reason_parts:
+                                result['filter_reason'] = " | ".join(reason_parts)
+                            else:
+                                result['filter_reason'] = f"Low quality score: {score}/10 (threshold: {self.config.SCORE_THRESHOLD}/10)"
+                            
                             if penalty_score > 0:
                                 logger.warning(f"[FILTERED] {image_name} | Original: {original_score} | Penalty: -{penalty_score} | Final: {score} | Threshold: {self.config.SCORE_THRESHOLD}")
                             else:

@@ -1,9 +1,9 @@
-./output/
+**output**/
 ./datasets/
 
 # keep token!
 quick_start_eas.sh
-
+*.sh
 
 # Python
 __pycache__/

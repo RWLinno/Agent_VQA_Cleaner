@@ -80,7 +80,7 @@ class Config:
     BATCH_SIZE = int(os.environ.get('BATCH_SIZE', 4))  # 每个processor的批处理大小
     
     # GPU配置
-    CUDA_VISIBLE_DEVICES = os.environ.get('CUDA_VISIBLE_DEVICES', '0,1,2,3')
+    CUDA_VISIBLE_DEVICES = os.environ.get('CUDA_VISIBLE_DEVICES', '0,1')
     TP = len(CUDA_VISIBLE_DEVICES.split(',')) if CUDA_VISIBLE_DEVICES else 1
     
     # 模型推理配置

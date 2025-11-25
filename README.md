@@ -336,6 +336,37 @@ AgentCleaner/
 └── logs/                       # 日志目录
 ```
 
+## 🆕 最新改进 (v2.2.0)
+
+**更新日期：** 2025-11-04
+
+### 核心改进
+
+1. **详细的过滤原因** - 不再只说"分数低于阈值"，而是告诉你为什么打了低分
+2. **模型响应字段** - `raw_response` → `model_response`，更清晰准确
+3. **点数据自动检测** - 自动检测并过滤答案中的坐标点（超过5个点打0分）
+4. **可视化工具** - 新增 `visualize_samples.py`，支持HTML展示和点坐标绘制
+
+### 快速使用
+
+```bash
+# 数据清洗后生成可视化报告
+python visualize_samples.py \
+    --input output/cleaned_full.jsonl \
+    --output visualization.html \
+    --filter filtered \
+    --sample_size 50
+```
+
+### 详细文档
+
+- 📖 [改进说明](./IMPROVEMENTS.md) - 详细的功能说明和实现细节
+- 🚀 [快速开始](./QUICK_START_IMPROVEMENTS.md) - 新功能使用指南
+- 📝 [改进摘要](./CHANGES_SUMMARY.md) - 简明的改动总结
+- 🧪 [功能测试](./test_improvements.py) - 运行测试验证功能
+
+---
+
 ## 🔍 技术实现
 
 ### 智能路径查找
